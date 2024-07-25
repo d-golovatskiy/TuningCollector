@@ -5,10 +5,9 @@ import com.example.tuningagent.services.TaskToCollectService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
+
+import java.io.IOException;
 
 @RestController
 @RequestMapping("/v1/tasksToCollect")
@@ -25,5 +24,11 @@ public class TaskToCollectController {
     public ResponseEntity<HttpStatus> actionTaskToCollect(@RequestBody TaskToCollect taskToCollect){
         return taskToCollectService.actionTaskToCollect(taskToCollect);
     }
+
+    @PostMapping("/prometheus")
+        public String test(@RequestBody TaskToCollect taskToCollect) throws IOException {
+            return taskToCollectService.queryPrometheusByTaskToCollect(taskToCollect);
+        }
+
 
 }

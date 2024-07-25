@@ -20,6 +20,9 @@ public class SysMeas {
     @Column(name = "sys_id")
     Long sysId;
 
+    @Column(name = "external_api_uri")
+    String externalApiUri;
+
     @ManyToOne(optional = false, targetEntity = Measurements.class)
     @JoinColumn(name = "meas_id", referencedColumnName = "id", insertable=false, updatable=false )
     Measurements measurements;

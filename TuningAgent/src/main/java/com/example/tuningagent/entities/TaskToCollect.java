@@ -36,6 +36,10 @@ public class TaskToCollect {
     @Column(name="date_end")
     Timestamp dateEnd;
 
+    @Column(name = "data_source")
+    String dataSource;
+
+
     @ManyToOne(optional = false, targetEntity = SysMeas.class)
     @JoinColumn(name = "sys_meas_id", referencedColumnName = "id", insertable=false, updatable=false )
     SysMeas sysMeas;
