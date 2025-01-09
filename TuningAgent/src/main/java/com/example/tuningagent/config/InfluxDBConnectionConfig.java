@@ -11,7 +11,6 @@ import org.springframework.context.annotation.PropertySource;
 @Configuration
 @PropertySource("classpath:influx.properties")
 public class InfluxDBConnectionConfig {
-
     @Value("${influx.url}")
     private String url;
 
@@ -24,11 +23,8 @@ public class InfluxDBConnectionConfig {
     @Value("${influx.bucket}")
     private String bucket;
 
-
     @Bean
     public InfluxDBClient influxDBConnection(){
         return InfluxDBClientFactory.create(url, token, org, bucket);
     }
-
-
 }
