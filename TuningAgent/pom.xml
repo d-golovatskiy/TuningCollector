@@ -18,13 +18,9 @@
     </properties>
     <dependencies>
         <dependency>
-        <groupId>com.influxdb</groupId>
-        <artifactId>influxdb-client-java</artifactId>
-        <version>4.0.0</version>
-    </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>.
-            <artifactId>spring-boot-starter-webflux</artifactId>
+            <groupId>com.influxdb</groupId>
+            <artifactId>influxdb-client-java</artifactId>
+            <version>4.0.0</version>
         </dependency>
         <dependency>
             <groupId>org.apache.httpcomponents</groupId>
@@ -80,6 +76,17 @@
             <groupId>io.minio</groupId>
             <artifactId>minio</artifactId>
             <version>8.5.2</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka</artifactId>
+            <version>3.3.1</version>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.kafka</groupId>
+            <artifactId>spring-kafka-test</artifactId>
+            <version>3.3.1</version>
+            <scope>test</scope>
         </dependency>
     </dependencies>
     <build>
