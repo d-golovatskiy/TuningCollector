@@ -2,17 +2,17 @@ package org.kubsu.tuning.domain.entities;
 
 import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Getter
 @Table(name = "sys_measurements")
+@NoArgsConstructor
 public class SysMeas {
-
     @Id
     @Column
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     Long id;
-
 
     @Column(name = "meas_id")
     Long measId;
@@ -30,6 +30,4 @@ public class SysMeas {
     @ManyToOne(optional = false, targetEntity = Sys.class)
     @JoinColumn(name = "sys_id", referencedColumnName = "id", insertable=false, updatable=false )
     Sys sys;
-
-
 }

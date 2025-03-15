@@ -13,9 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PrometheusResponseData {
-
    @JsonIgnore
    String resultType;
-   List<PrometheusResponseDataValue> result;
 
+   List<PrometheusResponseDataValue> result;
 }

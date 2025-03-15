@@ -13,11 +13,8 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 public class PrometheusResponseDataValue {
-
     @JsonIgnore
     Object metric;
 
     private List<List<String>> values;
-
-
 }

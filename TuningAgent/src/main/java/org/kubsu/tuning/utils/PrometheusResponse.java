@@ -12,12 +12,8 @@ import lombok.NoArgsConstructor;
 @Data
 
 public class PrometheusResponse {
-
     @JsonIgnore
     String status;
 
     PrometheusResponseData data;
-
-
-
 }

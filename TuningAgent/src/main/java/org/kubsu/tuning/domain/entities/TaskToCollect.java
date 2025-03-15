@@ -2,6 +2,7 @@ package org.kubsu.tuning.domain.entities;
 
 import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.sql.Timestamp;
@@ -11,8 +12,8 @@ import java.util.List;
 @Getter
 @Setter
 @Table(name= "tasks")
+@NoArgsConstructor
 public class TaskToCollect {
-
     @Id
     @Column
     @GeneratedValue(strategy = GenerationType.IDENTITY)
@@ -59,8 +60,5 @@ public class TaskToCollect {
         this.dateEnd = dateEnd;
         this.sysMeas = sysMeas;
         this.affectExceptions = affectExceptions;
-    }
-
-    public TaskToCollect() {
     }
 }

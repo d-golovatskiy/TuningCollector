@@ -2,10 +2,12 @@ package org.kubsu.tuning.domain.entities;
 
 import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 @Entity
 @Getter
 @Table(name= "affecting_scheme")
+@NoArgsConstructor
 public class AffectingScheme {
     @Id
     @Column(name="id")
@@ -17,9 +19,4 @@ public class AffectingScheme {
 
     @Column(name="affecting_sys_id")
     Long affectingId;
-
-
-
-
-
 }

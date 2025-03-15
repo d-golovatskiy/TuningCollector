@@ -4,13 +4,14 @@ package org.kubsu.tuning.domain.entities;
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.*;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 
 
 @Getter
 @Entity
 @Table(name="affect_exception")
+@NoArgsConstructor
 public class AffectException {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name="id")
@@ -31,9 +32,4 @@ public class AffectException {
     @ManyToOne(optional = false, targetEntity = TaskToCollect.class)
     @JoinColumn(name = "task_id", referencedColumnName = "id", insertable=false, updatable=false )
     TaskToCollect taskToCollect;
-
-    public AffectException() {
-    }
-
-
 }

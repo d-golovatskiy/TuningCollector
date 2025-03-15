@@ -1,6 +1,6 @@
 package org.kubsu.tuning.services;
 
-import org.kubsu.tuning.AlarmRepository;
+import org.kubsu.tuning.repositories.AlarmRepository;
 import org.kubsu.tuning.domain.TaskToCollectResult;
 import org.kubsu.tuning.domain.dto.TaskToCollectResultDto;
 import org.kubsu.tuning.domain.entities.AffectException;
@@ -34,7 +34,6 @@ import java.util.concurrent.CompletableFuture;
 @Service
 @KafkaListener(topics = "task-to-collect-queue-topic")
 public class TaskToCollectService {
-
     @Value("${influx.bucket}")
     String bucket;
 
@@ -68,7 +67,6 @@ public class TaskToCollectService {
     @KafkaHandler
     public void collect(TaskToCollect taskToCollect) throws IOException, ParseException {
         String res = "";
-        // с логикой использования алармов бред какой-то
         List<Alarm> alarms = alarmRepository.selectAlarms(taskToCollect.getId(), taskToCollect.getSysMeas().getSysId());
         String resTask = "";
         if (taskToCollect.isUseAffectsScheme()) {
@@ -103,22 +101,19 @@ public class TaskToCollectService {
             }
 
         }
-
         res += resTask;
         System.out.println(res);
 
         TaskToCollectResult status = TaskToCollectResult.OK;
-        String fileName = "task_id_" + taskToCollect.getId()+".csv";
+        String fileName = "task_to_collect_id_" + taskToCollect.getId()+".csv";
         File file = new File(".\\" + fileName);
 
         try (FileOutputStream fileOutputStream = new FileOutputStream(file)) {
             fileOutputStream.write(res.getBytes());
-
         } catch (Exception e) {
             System.out.print("File didnt written");
             status = TaskToCollectResult.ERROR;
         }
-
         if (status.equals(TaskToCollectResult.OK)) {
             try (FileInputStream fileInputStream = new FileInputStream(file)) {
                 minioClient.putObject(PutObjectArgs
@@ -132,11 +127,9 @@ public class TaskToCollectService {
                 status = TaskToCollectResult.ERROR;
             }
         }
-
         if (file.exists()) {
             file.delete();
         }
-
         TaskToCollectResultDto taskToCollectResultDto = new TaskToCollectResultDto(taskToCollect.getId(), status);
 
         CompletableFuture<SendResult<String, TaskToCollectResultDto>> future = kafkaTemplate.send("task-to-collect-result-topic",
@@ -149,19 +142,8 @@ public class TaskToCollectService {
                 log.info("Message sent successful: {}", result.getRecordMetadata());
             }
         });
-
         future.join();
-
         log.info("Return: {}", taskToCollect.getId());
-
-
-/*        Request.Post("http://localhost:8080/monitoring/data/" + taskToCollect.getId())
-                // .addHeader("Content-Type", "application/vnd.ms-excel")
-                .addHeader("Content-Type", "text/plain")
-                .bodyByteArray(status.getBytes("ISO8859-15"))
-                .execute();*/
-
-
     }
 
     //TODO вынести такие вспомогательные методы в отдельные util-классы в разрезе провайдеров
@@ -199,7 +181,8 @@ public class TaskToCollectService {
         String end = convertToInfluxDate(e);
         String flux = "from(bucket: \"" + bucket + "\")" +
                 "  |> range(start:" + start + ", stop:" + end + ")" +
-                "  |> filter(fn: (r) => r[\"_measurement\"] == \"" + t.getSysMeas().getMeasurements().getName() + "\")";
+                "  |> filter(fn: (r) => r[\"_measurement\"] == \"" + t.getSysMeas().getMeasurements().getName() + "\")" +
+                "  |> filter(fn: (r) => r[\"_field\"] == \"" + t.getSysMeas().getMeasurements().getFieldName() + "\")";
         QueryApi queryApi = influxDBClient.getQueryApi();
         String res = queryApi.queryRaw(flux);
         System.out.println(res);
@@ -247,7 +230,26 @@ public class TaskToCollectService {
                 res = res.replaceFirst(s + '\n', "");
             }
         }
-        res = meta + res;
+
+        //postprocess
+        List<String> expectedHeaders = new ArrayList<>(List.of("_value", "_time", "_field", "_measurement"));
+        Map<String, Integer> headerAndPosition = new HashMap<>();
+        String[] headers =  meta.split(",");
+        for (int i = 0; i < headers.length; i++) {
+            if (expectedHeaders.contains(headers[i])) {
+                headerAndPosition.put(headers[i], i);
+            }
+        }
+        List<String> resRows = Arrays.asList(res.split("\n"));
+        for (int i = 0; i < resRows.size(); i++) {
+            String row = resRows.get(i);
+            List<String> columns = Arrays.asList(row.split(","));
+            resRows.set(i, columns.get(headerAndPosition.get("_time")) + ","
+                    + columns.get(headerAndPosition.get("_value")) + ','
+                    + columns.get(headerAndPosition.get("_measurement")) + "_" + columns.get(headerAndPosition.get("_field")));
+        }
+
+        res = String.join("\n", resRows);
         System.out.println(res);
         return res;
     }
