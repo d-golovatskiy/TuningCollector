@@ -2,12 +2,10 @@ package org.kubsu.tuning.domain.entities;
 
 import jakarta.persistence.*;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 
 @Entity
 @Getter
 @Table(name = "sys_measurements")
-@NoArgsConstructor
 public class SysMeas {
     @Id
     @Column
@@ -20,8 +18,14 @@ public class SysMeas {
     @Column(name = "sys_id")
     Long sysId;
 
-    @Column(name = "external_api_uri")
+    @Column(name = "data_source")
+    String dataSource;
+
+    @Column(name="external_api_uri")
     String externalApiUri;
+
+    @Column(name = "is_workload", columnDefinition = "boolean default false")
+    boolean isWorkload;
 
     @ManyToOne(optional = false, targetEntity = Measurements.class)
     @JoinColumn(name = "meas_id", referencedColumnName = "id", insertable=false, updatable=false )

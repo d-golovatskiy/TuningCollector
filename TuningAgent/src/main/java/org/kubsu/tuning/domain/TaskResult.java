@@ -1,6 +1,6 @@
 package org.kubsu.tuning.domain;
 
-public enum TaskToCollectResult {
+public enum TaskResult {
     OK,
     ERROR
 }

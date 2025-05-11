@@ -1,31 +1,31 @@
 package org.kubsu.tuning.domain.dto;
 
-import org.kubsu.tuning.domain.TaskToCollectResult;
+import org.kubsu.tuning.domain.TaskResult;
 
 public class TaskToCollectResultDto {
     private Long taskId;
-    private TaskToCollectResult taskToCollectResult;
+    private TaskResult taskResult;
 
     public TaskToCollectResultDto() {}
 
-    public TaskToCollectResultDto(Long taskId, TaskToCollectResult taskToCollectResult) {
+    public TaskToCollectResultDto(Long taskId, TaskResult taskResult) {
         this.taskId = taskId;
-        this.taskToCollectResult = taskToCollectResult;
+        this.taskResult = taskResult;
     }
 
     public Long getTaskId() {
         return taskId;
     }
 
-    public TaskToCollectResult getTaskToCollectResult() {
-        return taskToCollectResult;
+    public TaskResult getTaskResult() {
+        return taskResult;
     }
 
     public void setTaskId(Long taskId) {
         this.taskId = taskId;
     }
 
-    public void setTaskToCollectResult(TaskToCollectResult taskToCollectResult) {
-        this.taskToCollectResult = taskToCollectResult;
+    public void setTaskToCollectResult(TaskResult taskResult) {
+        this.taskResult = taskResult;
     }
 }

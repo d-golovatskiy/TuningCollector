@@ -1,14 +1,15 @@
 package org.kubsu.tuning.services;
 
+import com.influxdb.client.InfluxDBClient;
+import com.influxdb.client.InfluxDBClientFactory;
+import org.kubsu.tuning.domain.dto.SysMeasDto;
+import org.kubsu.tuning.domain.dto.TaskToCollectDto;
 import org.kubsu.tuning.repositories.AlarmRepository;
-import org.kubsu.tuning.domain.TaskToCollectResult;
+import org.kubsu.tuning.domain.TaskResult;
 import org.kubsu.tuning.domain.dto.TaskToCollectResultDto;
-import org.kubsu.tuning.domain.entities.AffectException;
 import org.kubsu.tuning.domain.entities.Alarm;
-import org.kubsu.tuning.domain.entities.TaskToCollect;
 import org.kubsu.tuning.utils.PrometheusResponse;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.influxdb.client.InfluxDBClient;
 import com.influxdb.client.QueryApi;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
@@ -30,24 +31,29 @@ import java.text.ParseException;
 import java.text.SimpleDateFormat;
 import java.util.*;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Service
 @KafkaListener(topics = "task-to-collect-queue-topic")
 public class TaskToCollectService {
-    @Value("${influx.bucket}")
-    String bucket;
-
     @Value("${minio.bucket}")
     String minioBucket;
 
+    //TODO вынести это дело в БД
     @Value("${prometheus.uri}")
     String prometheusUri;
 
     @Value("${prometheus.queryStep}")
     String prometheusQueryStep;
 
-    @Autowired
-    InfluxDBClient influxDBClient;
+    @Value("${influx.url}")
+    private String url;
+
+    @Value("${influx.token}")
+    private char[] token;
+
+    @Value("${influx.org}")
+    private String org;
 
     @Autowired
     MinioClient minioClient;
@@ -65,46 +71,49 @@ public class TaskToCollectService {
     }
 
     @KafkaHandler
-    public void collect(TaskToCollect taskToCollect) throws IOException, ParseException {
+    public void collect(TaskToCollectDto taskToCollect) throws IOException, ParseException {
         String res = "";
-        List<Alarm> alarms = alarmRepository.selectAlarms(taskToCollect.getId(), taskToCollect.getSysMeas().getSysId());
         String resTask = "";
-        if (taskToCollect.isUseAffectsScheme()) {
-            alarms = taskToCollect.getSysMeas().getSys().getAlarms();
-            for (AffectException a : taskToCollect.getAffectExceptions()) {
-                if (a.getSysId().equals(taskToCollect.getSysMeas().getSysId())) {
+        if (taskToCollect.isUseAffectScheme()) {
+            List<Alarm> alarms = alarmRepository.selectAlarms(taskToCollect.getId(), taskToCollect.getSysMeas().getSysId());
+            /*for (AffectException affectException : taskToCollect.getAffectExceptions()) {
+                if (affectException.getSysId().equals(taskToCollect.getSysMeas().getSysId())) {
                     alarms = null;
                     break;
                 }
-            }
-            if (alarms == null) {
-                if (taskToCollect.getDataSource().equals("influx")) {
-                    resTask = queryInfluxByTaskToCollect(taskToCollect, taskToCollect.getDateStart(), taskToCollect.getDateEnd());
-                } else if (taskToCollect.getDataSource().equals("prometheus")) {
-                    resTask = convertPrometheusRawResponseToCsvForm(taskToCollect, queryPrometheusByTaskToCollect(taskToCollect));
+            }*/
+            if (alarms == null || alarms.isEmpty()) {
+                if (taskToCollect.getSysMeas().getDataSource().equals("influx")) {
+                    resTask = queryInfluxBySysMeas(taskToCollect.getSysMeas(), taskToCollect.getDateStart(), taskToCollect.getDateEnd());
+                } else if (taskToCollect.getSysMeas().getDataSource().equals("prometheus")) {
+                    resTask = convertPrometheusRawResponseToCsvForm(taskToCollect, queryPrometheusByTaskToCollect(taskToCollect, taskToCollect.getSysMeas()));
                 }
             } else {
-                if (taskToCollect.getDataSource().equals("influx")) {
+                if (taskToCollect.getSysMeas().getDataSource().equals("influx")) {
                     resTask = removeAlarmDataForInflux(taskToCollect, alarms);
-                } else if (taskToCollect.getDataSource().equals("prometheus")) {
+                } else if (taskToCollect.getSysMeas().getDataSource().equals("prometheus")) {
                     resTask = removeAlarmDataForPrometheus(taskToCollect, alarms);
                 }
             }
         } else {
-            if (taskToCollect.getDataSource().equals("influx")) {
-                resTask = queryInfluxByTaskToCollect(taskToCollect, taskToCollect.getDateStart(), taskToCollect.getDateEnd());
-            } else if (taskToCollect.getDataSource().equals("prometheus")) {
-                resTask = convertPrometheusRawResponseToCsvForm(taskToCollect, queryPrometheusByTaskToCollect(taskToCollect));
+            if (taskToCollect.getSysMeas().getDataSource().equals("influx")) {
+                resTask = queryInfluxBySysMeas(taskToCollect.getSysMeas(), taskToCollect.getDateStart(), taskToCollect.getDateEnd());
+            } else if (taskToCollect.getSysMeas().getDataSource().equals("prometheus")) {
+                resTask = convertPrometheusRawResponseToCsvForm(taskToCollect, queryPrometheusByTaskToCollect(taskToCollect, taskToCollect.getSysMeas()));
 
-            } else if (taskToCollect.getDataSource().equals("external api")) {
-                resTask = queryExternalApiByTaskToCollect(taskToCollect);
+            } else if (taskToCollect.getSysMeas().getDataSource().equals("external api")) {
+                resTask = queryExternalApiByTaskToCollect(taskToCollect.getSysMeas());
             }
 
         }
-        res += resTask;
+        if (taskToCollect.getWorkloadSysMeas().getDataSource().equals("influx")) {
+            res += addWorkloadData(taskToCollect, postprocessInfluxData(resTask));
+        } else if (taskToCollect.getWorkloadSysMeas().getDataSource().equals("prometheus")) {
+            res += addWorkloadData(taskToCollect, resTask);
+        }
         System.out.println(res);
 
-        TaskToCollectResult status = TaskToCollectResult.OK;
+        TaskResult status = TaskResult.OK;
         String fileName = "task_to_collect_id_" + taskToCollect.getId()+".csv";
         File file = new File(".\\" + fileName);
 
@@ -112,9 +121,9 @@ public class TaskToCollectService {
             fileOutputStream.write(res.getBytes());
         } catch (Exception e) {
             System.out.print("File didnt written");
-            status = TaskToCollectResult.ERROR;
+            status = TaskResult.ERROR;
         }
-        if (status.equals(TaskToCollectResult.OK)) {
+        if (status.equals(TaskResult.OK)) {
             try (FileInputStream fileInputStream = new FileInputStream(file)) {
                 minioClient.putObject(PutObjectArgs
                         .builder()
@@ -124,7 +133,7 @@ public class TaskToCollectService {
                         .build());
             } catch (Exception e) {
                 System.out.print("File didnt read");
-                status = TaskToCollectResult.ERROR;
+                status = TaskResult.ERROR;
             }
         }
         if (file.exists()) {
@@ -162,7 +171,7 @@ public class TaskToCollectService {
         return values;
     }
 
-    private String convertPrometheusRawResponseToCsvForm(TaskToCollect t, String rawResponse) throws IOException {
+    private String convertPrometheusRawResponseToCsvForm(TaskToCollectDto taskToCollect, String rawResponse) throws IOException {
         StringReader reader = new StringReader(rawResponse);
         ObjectMapper mapper = new ObjectMapper();
         PrometheusResponse response = mapper.readValue(reader, PrometheusResponse.class);
@@ -171,32 +180,71 @@ public class TaskToCollectService {
 
         String res = "";
         for (List<String> item : response.getData().getResult().get(0).getValues()) {
-            res += item.get(0) + "," + item.get(1) + "," + t.getSysMeas().getMeasurements().getName() + "\n";
+            res += item.get(0) + ";" + item.get(1) + ";" + taskToCollect.getSysMeas().getMeasurement().getName() + "\n";
         }
         return res;
     }
 
-    private String queryInfluxByTaskToCollect(TaskToCollect t, Timestamp s, Timestamp e) {
+    private String queryInfluxBySysMeas(SysMeasDto sysMeasDto, Timestamp s, Timestamp e) {
+        String bucket = sysMeasDto.getMeasurement().getInfluxBucketName();
         String start = convertToInfluxDate(s);
         String end = convertToInfluxDate(e);
-        String flux = "from(bucket: \"" + bucket + "\")" +
+        AtomicReference<String> flux = new AtomicReference<>("from(bucket: \"" + bucket + "\")" +
                 "  |> range(start:" + start + ", stop:" + end + ")" +
-                "  |> filter(fn: (r) => r[\"_measurement\"] == \"" + t.getSysMeas().getMeasurements().getName() + "\")" +
-                "  |> filter(fn: (r) => r[\"_field\"] == \"" + t.getSysMeas().getMeasurements().getFieldName() + "\")";
+                "  |> filter(fn: (r) => r[\"_measurement\"] == \"" + sysMeasDto.getMeasurement().getName() + "\")" +
+                "  |> filter(fn: (r) => r[\"_field\"] == \"" + sysMeasDto.getMeasurement().getFieldName() + "\")");
+        sysMeasDto.getMeasurement().getInfluxTagValues().stream()
+                .forEach(tagValue -> {
+                    flux.set(flux + "  |> filter(fn: (r) => r[\"" + tagValue.getTagName() + "\"] == \"" + tagValue.getValue() + "\")");
+                });
+
+        InfluxDBClient influxDBClient = InfluxDBClientFactory.create(url, token, org, bucket);
         QueryApi queryApi = influxDBClient.getQueryApi();
-        String res = queryApi.queryRaw(flux);
+        String res = queryApi.queryRaw(flux.get());
         System.out.println(res);
         return res;
     }
 
-    public String queryPrometheusByTaskToCollect(TaskToCollect t) throws IOException {
+    private String addWorkloadData(TaskToCollectDto taskToCollectDto, String data) throws IOException {
+        String workloadData = "";
+        if (taskToCollectDto.getWorkloadSysMeas().getDataSource().equals("influx")) {
+            workloadData = queryInfluxBySysMeas(taskToCollectDto.getWorkloadSysMeas(), taskToCollectDto.getDateStart(), taskToCollectDto.getDateEnd());
+            workloadData = postprocessInfluxData(workloadData);
+        } else if (taskToCollectDto.getWorkloadSysMeas().getDataSource().equals("prometheus")) {
+            workloadData = convertPrometheusRawResponseToCsvForm(taskToCollectDto, queryPrometheusByTaskToCollect(taskToCollectDto, taskToCollectDto.getWorkloadSysMeas()));
+        }
+        String[] workloadDataDivided = workloadData.split("\n");
+        List<String> result = new ArrayList<>();
+        for (int i = 1; i < workloadDataDivided.length - 2; i++) {
+            String leftBoundary = workloadDataDivided[i];
+            String rightBoundary = workloadDataDivided[i + 1];
+            Timestamp periodStart = Timestamp.valueOf(leftBoundary.split(";")[0].replace("T", " ").replace("Z","").split("\\+")[0]);
+            Timestamp periodEnd = Timestamp.valueOf(rightBoundary.split(";")[0].replace("T", " ").replace("Z","").split("\\+")[0]);
+            for (String line: data.split("\n")) {
+                if (line.startsWith("_")) {
+                    continue;
+                }
+                Timestamp rowTimestamp = Timestamp.valueOf(line.split(";")[0].replace("T", " ").replace("Z","").split("\\+")[0]);
+                if (rowTimestamp.after(periodStart) && rowTimestamp.before(periodEnd)
+                        || rowTimestamp.equals(periodStart) && line.split(";").length == 3) {
+                    result.add(line + ";" + leftBoundary.split(";")[1]);
+                }
+                if (rowTimestamp.after(periodEnd)){
+                    break;
+                }
+            }
+        }
+        return String.join("\n", result);
+    }
 
-        String encodedMeas = t.getSysMeas().getMeasurements().getName().replaceAll("\"", "%22")
+    public String queryPrometheusByTaskToCollect(TaskToCollectDto taskToCollectDto, SysMeasDto sysMeasDto) throws IOException {
+
+        String encodedMeas = sysMeasDto.getMeasurement().getName().replaceAll("\"", "%22")
                 .replaceAll("\\{", "%7B")
                 .replaceAll("}", "%7D");
         System.out.println("PROMETHEUS");
-        String start = convertToInfluxDate(t.getDateStart());
-        String end = convertToInfluxDate(t.getDateEnd());
+        String start = convertToInfluxDate(taskToCollectDto.getDateStart());
+        String end = convertToInfluxDate(taskToCollectDto.getDateEnd());
 
         final Response response = Request.Get(prometheusUri + "query_range?query="
                         + encodedMeas + "&start=" + start + "&end=" + end + "&step=" + prometheusQueryStep)
@@ -206,9 +254,9 @@ public class TaskToCollectService {
         return response.returnContent().toString();
     }
 
-    public String queryExternalApiByTaskToCollect(TaskToCollect t) throws IOException {
+    public String queryExternalApiByTaskToCollect(SysMeasDto sysMeas) throws IOException {
         System.out.println("ExternalAPI");
-        final Response response = Request.Get(t.getSysMeas().getExternalApiUri())
+        final Response response = Request.Get(sysMeas.getExternalApiUrl())
                 // .addHeader("Content-Type", "application/vnd.ms-excel")
                 .addHeader("Content-Type", "text/plain")
                 .execute();
@@ -217,12 +265,11 @@ public class TaskToCollectService {
 
     }
 
-    //может получше как-то можно???
-    private String removeAlarmDataForInflux(TaskToCollect t, List<Alarm> alarms) {
-        String res = queryInfluxByTaskToCollect(t, t.getDateStart(), t.getDateEnd());
+    private String removeAlarmDataForInflux(TaskToCollectDto t, List<Alarm> alarms) {
+        String res = queryInfluxBySysMeas(t.getSysMeas(), t.getDateStart(), t.getDateEnd());
         String meta = res.split("\n")[0] + '\n';
         for (Alarm a : alarms) {
-            String tmp = queryInfluxByTaskToCollect(t, a.getDateStart(), a.getDateEnd());
+            String tmp = queryInfluxBySysMeas(t.getSysMeas(), a.getDateStart(), a.getDateEnd());
             tmp = tmp.replaceAll(convertToInfluxDate(a.getDateStart()), convertToInfluxDate(t.getDateStart()));
             tmp = tmp.replaceAll(convertToInfluxDate(a.getDateEnd()), convertToInfluxDate(t.getDateEnd()));
             System.out.println(tmp);
@@ -231,7 +278,11 @@ public class TaskToCollectService {
             }
         }
 
-        //postprocess
+        return res;
+    }
+
+    private String postprocessInfluxData(String rawData) {
+        String meta = rawData.split("\n")[0] + '\n';
         List<String> expectedHeaders = new ArrayList<>(List.of("_value", "_time", "_field", "_measurement"));
         Map<String, Integer> headerAndPosition = new HashMap<>();
         String[] headers =  meta.split(",");
@@ -240,26 +291,23 @@ public class TaskToCollectService {
                 headerAndPosition.put(headers[i], i);
             }
         }
-        List<String> resRows = Arrays.asList(res.split("\n"));
+        List<String> resRows = Arrays.asList(rawData.split("\n"));
         for (int i = 0; i < resRows.size(); i++) {
             String row = resRows.get(i);
             List<String> columns = Arrays.asList(row.split(","));
-            resRows.set(i, columns.get(headerAndPosition.get("_time")) + ","
-                    + columns.get(headerAndPosition.get("_value")) + ','
+            resRows.set(i, columns.get(headerAndPosition.get("_time")) + ";"
+                    + columns.get(headerAndPosition.get("_value")) + ';'
                     + columns.get(headerAndPosition.get("_measurement")) + "_" + columns.get(headerAndPosition.get("_field")));
         }
-
-        res = String.join("\n", resRows);
-        System.out.println(res);
-        return res;
+        return String.join("\n", resRows);
     }
 
-    private String removeAlarmDataForPrometheus(TaskToCollect t, List<Alarm> alarms) throws IOException, ParseException {
-        List<String> res = new ArrayList<>(Arrays.stream(convertPrometheusRawResponseToCsvForm(t, queryPrometheusByTaskToCollect(t)).split("\n")).toList());
+    private String removeAlarmDataForPrometheus(TaskToCollectDto t, List<Alarm> alarms) throws IOException, ParseException {
+        List<String> res = new ArrayList<>(Arrays.stream(convertPrometheusRawResponseToCsvForm(t, queryPrometheusByTaskToCollect(t, t.getSysMeas())).split("\n")).toList());
         List<String> deletedItems = new ArrayList<>();
         for (String item : res) {
             for (Alarm a : alarms) {
-                Date tmpDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").parse(item.split(",")[0]);
+                Date tmpDate = new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ").parse(item.split(";")[0]);
                 if (tmpDate.after(a.getDateStart()) && tmpDate.before(a.getDateEnd())) {
                     res.set(res.indexOf(item), "");
                     deletedItems.add(item);
@@ -273,7 +321,6 @@ public class TaskToCollectService {
                 ret.append(item).append('\n');
             }
         }
-
         System.out.println(ret);
         return ret.toString();
     }

@@ -15,5 +15,5 @@ public interface AlarmRepository extends JpaRepository<Alarm, Long> {
             "and a.sys_id in " +
             "(select affecting_sys_id from affecting_scheme where affected_sys_id = :s_id ) " +
             "or sys_id =:s_id order by date_start ASC", nativeQuery = true)
-    List<Alarm> selectAlarms(@Param("t_id")Long sId,@Param("s_id") Long e);
+    List<Alarm> selectAlarms(@Param("t_id")Long taskId, @Param("s_id") Long sysId);
 }

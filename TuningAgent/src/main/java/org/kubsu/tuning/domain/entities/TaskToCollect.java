@@ -1,8 +1,8 @@
 package org.kubsu.tuning.domain.entities;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.persistence.*;
 import lombok.Getter;
-import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.sql.Timestamp;
@@ -11,8 +11,7 @@ import java.util.List;
 @Entity
 @Getter
 @Setter
-@Table(name= "tasks")
-@NoArgsConstructor
+@Table(name= "tasks_to_collect")
 public class TaskToCollect {
     @Id
     @Column
@@ -37,28 +36,15 @@ public class TaskToCollect {
     @Column(name="date_end")
     Timestamp dateEnd;
 
-    @Column(name = "data_source")
-    String dataSource;
-
     @Column(name = "collecting_status")
     String collectingStatus;
 
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @ManyToOne(optional = false, targetEntity = SysMeas.class)
     @JoinColumn(name = "sys_meas_id", referencedColumnName = "id", insertable=false, updatable=false )
     SysMeas sysMeas;
 
+    @JsonProperty(access = JsonProperty.Access.READ_ONLY)
     @OneToMany(mappedBy = "taskToCollect")
-     List<AffectException> affectExceptions;
-
-    public TaskToCollect(Long id, String name, Long sysMeasId, String status, boolean useAffectsScheme, Timestamp dateStart, Timestamp dateEnd, SysMeas sysMeas, List<AffectException> affectExceptions) {
-        this.id = id;
-        this.name = name;
-        this.sysMeasId = sysMeasId;
-        this.status = status;
-        this.useAffectsScheme = useAffectsScheme;
-        this.dateStart = dateStart;
-        this.dateEnd = dateEnd;
-        this.sysMeas = sysMeas;
-        this.affectExceptions = affectExceptions;
-    }
+    private List<AffectException> affectExceptions;
 }

@@ -1,7 +1,7 @@
 package org.kubsu.tuning.config;
 
+import org.kubsu.tuning.domain.dto.TaskToCollectDto;
 import org.kubsu.tuning.domain.dto.TaskToCollectResultDto;
-import org.kubsu.tuning.domain.entities.TaskToCollect;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
@@ -47,7 +47,7 @@ public class KafkaConfig {
     }
 
     @Bean
-    ConsumerFactory<String, TaskToCollect> consumerFactoryTaskToCollectResult(){
+    ConsumerFactory<String, TaskToCollectDto> consumerFactoryTaskToCollectResult(){
         Map<String, Object> config = new HashMap<>();
         config.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers);
         config.put(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
